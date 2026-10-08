@@ -89,18 +89,6 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                 <Volume2 className="w-3.5 h-3.5" />
                 <span>English</span>
               </button>
-
-              <button
-                onClick={() => {
-                  const textTa = 'வணக்கம்! இந்த தளத்தில் கிராம புகார்கள் பதிவு செய்தல், பயிர் மருத்துவர் மற்றும் மண்டி சந்தை விலை விபரங்கள் உள்ளன.';
-                  const textEn = 'Welcome! This platform features village grievance reporting, crop doctor, and live mandi prices.';
-                  speakBilingual(textTa, textEn);
-                }}
-                className="px-2 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition-colors"
-                title="Listen in both Tamil and English sequentially"
-              >
-                <span>🌐 {language === 'ta' ? 'இருமொழி' : 'Both'}</span>
-              </button>
             </div>
 
             <button

@@ -338,18 +338,6 @@ export default function DiseaseDetectPage() {
                         <Volume2 className="w-3.5 h-3.5" />
                         <span>English</span>
                       </button>
-
-                      <button
-                        onClick={() => {
-                          const taPrescription = diagnosisResult.audioSpeechTa || `பயிர் ${diagnosisResult.cropTamil}, நோய் ${diagnosisResult.diseaseNameTamil}. மருந்து: ${diagnosisResult.organicTreatmentTamil[0] || 'இயற்கை மருந்து தெளிக்கவும்'}.`;
-                          const enPrescription = diagnosisResult.audioSpeechEn || `Crop ${diagnosisResult.crop}, disease ${diagnosisResult.diseaseName}. Remedy: ${diagnosisResult.organicTreatment[0] || 'Apply organic neem formulation'}.`;
-                          speakBilingual(taPrescription, enPrescription);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px]"
-                        title="Listen in both Tamil and English"
-                      >
-                        <span>🌐 {language === 'ta' ? 'இருமொழி' : 'Both'}</span>
-                      </button>
                     </div>
                   </div>
                 </div>

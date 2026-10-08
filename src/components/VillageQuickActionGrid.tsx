@@ -59,20 +59,18 @@ export const VillageQuickActionGrid: React.FC<VillageQuickActionGridProps> = ({ 
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="bg-amber-400 text-slate-950 text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-sm">
-                {language === 'ta' ? '🎙️ இருமொழி குரல் வழிகாட்டி' : '🎙️ Bilingual Voice Guide'}
+                {language === 'ta' ? '🎙️ குரல் வழிகாட்டி' : '🎙️ Voice Guide'}
               </span>
               <span className="text-emerald-200 text-xs font-bold">
-                {language === 'ta' ? 'தமிழ் & English இரண்டும் பேசும்' : 'Clear Tamil & English Audio'}
+                {language === 'ta' ? 'தெளிவான ஒற்றைக் குரல் விளக்கம்' : 'Clear Single-Voice Audio'}
               </span>
               {isSpeaking && (
                 <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-red-500/90 text-white text-[10px] font-black animate-pulse shadow-sm">
                   <span className="w-2 h-2 rounded-full bg-white animate-ping" />
                   <span>
-                    {speakingLang === 'both' 
-                      ? (language === 'ta' ? '📢 இருமொழி வழிகாட்டல் ஒலிக்கிறது...' : '📢 Playing Bilingual Guide...')
-                      : speakingLang === 'ta' 
-                        ? '📢 தமிழில் பேசுகிறது...' 
-                        : '📢 Speaking in English...'}
+                    {speakingLang === 'ta' 
+                      ? '📢 தமிழில் பேசுகிறது...' 
+                      : '📢 Speaking in English...'}
                   </span>
                 </span>
               )}
@@ -80,12 +78,12 @@ export const VillageQuickActionGrid: React.FC<VillageQuickActionGridProps> = ({ 
             <h3 className="text-sm sm:text-base font-extrabold mt-1 text-white">
               {language === 'ta' 
                 ? 'பொத்தான்களை தொட்டு தமிழ் அல்லது ஆங்கிலத்தில் தெளிவான குரல் வழிகாட்டலை கேளுங்கள்!' 
-                : 'Listen to clear audio guidance in Tamil, English, or both languages together!'}
+                : 'Tap a button below to hear clear voice guidance in your chosen language!'}
             </h3>
           </div>
         </div>
 
-        {/* Audio Action Buttons: Tamil, English, Bilingual, Stop */}
+        {/* Audio Action Buttons: Tamil, English, Active Guide, Stop */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 flex-shrink-0">
           
           {/* Button 1: Tamil Voice */}
@@ -114,20 +112,6 @@ export const VillageQuickActionGrid: React.FC<VillageQuickActionGridProps> = ({ 
           >
             <Volume2 className="w-4 h-4" />
             <span>🗣️ English</span>
-          </button>
-
-          {/* Button 3: Bilingual (Tamil + English) */}
-          <button
-            onClick={() => speakBilingual(tamilGuideText, englishGuideText)}
-            className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all shadow-lg active:scale-95 ${
-              isSpeaking && speakingLang === 'both'
-                ? 'bg-amber-300 text-slate-950 ring-4 ring-amber-400/50 scale-105'
-                : 'bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-amber-200 text-slate-950 shadow-amber-400/30'
-            }`}
-            title="Listen in both Tamil and English sequentially"
-          >
-            <Volume2 className="w-4 h-4 text-slate-950" />
-            <span>🌐 {language === 'ta' ? 'இருமொழி (தமிழ்+Eng)' : 'Tamil + English'}</span>
           </button>
 
           {/* Stop Button when playing */}

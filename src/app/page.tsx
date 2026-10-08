@@ -114,18 +114,6 @@ export default function DashboardPage() {
                 <Volume2 className="w-4 h-4 text-slate-950" />
                 <span>🗣️ English</span>
               </button>
-
-              <button
-                onClick={() => {
-                  const messageTa = `இன்றைய கிராம விபரம்: மொத்த புகார்கள் ${totalComplaints}, இதில் சரிசெய்யப்பட்டவை ${resolvedComplaints}. வானிலை ${weather.temp} டிகிரி செல்சியஸ்.`;
-                  const messageEn = `Village briefing: Total grievances ${totalComplaints}, Resolved ${resolvedComplaints}. Weather ${weather.temp}°C.`;
-                  speakBilingual(messageTa, messageEn);
-                }}
-                className="flex items-center space-x-1.5 bg-gradient-to-r from-emerald-400 to-teal-300 hover:brightness-110 text-slate-950 font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-md transition-all active:scale-95"
-                title="Listen in both Tamil and English sequentially"
-              >
-                <span>🌐 {language === 'ta' ? 'இருமொழி' : 'Both'}</span>
-              </button>
             </div>
           </div>
         </div>

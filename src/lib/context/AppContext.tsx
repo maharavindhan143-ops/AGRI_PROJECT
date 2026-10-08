@@ -251,6 +251,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(LOCAL_STORAGE_KEY_FARMER, JSON.stringify(updated));
   };
 
+  const sessionIdRef = React.useRef(0);
+
   const getBestVoice = (targetLang: Language): SpeechSynthesisVoice | null => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
     const currentVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
@@ -285,9 +287,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return null;
   };
 
-  const speakUtterancePromise = (text: string, targetLang: Language): Promise<void> => {
+  const stopSpeakingInternal = () => {
+    isCancelledRef.current = true;
+    if (activeAudioRef.current) {
+      const audio = activeAudioRef.current;
+      audio.onended = null;
+      audio.onerror = null;
+      audio.onplay = null;
+      audio.pause();
+      audio.src = '';
+      try {
+        audio.removeAttribute('src');
+        audio.load();
+      } catch {}
+      activeAudioRef.current = null;
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
+  const speakUtterancePromise = (text: string, targetLang: Language, session: number): Promise<void> => {
     return new Promise((resolve) => {
       if (typeof window === 'undefined' || !('speechSynthesis' in window) || isCancelledRef.current) {
+        resolve();
+        return;
+      }
+
+      if (sessionIdRef.current !== session) {
         resolve();
         return;
       }
@@ -295,7 +322,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = targetLang === 'ta' ? 'ta-IN' : 'en-IN';
-      utterance.rate = targetLang === 'ta' ? 0.88 : 0.95; // Slightly slower for clear Tamil syllables
+      utterance.rate = targetLang === 'ta' ? 0.9 : 0.95;
       utterance.pitch = 1.0;
 
       const voice = getBestVoice(targetLang);
@@ -316,99 +343,110 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const playAudioStream = (text: string, targetLang: Language): Promise<void> => {
+    const currentSession = ++sessionIdRef.current;
+    isCancelledRef.current = false;
+    stopSpeakingInternal();
+    isCancelledRef.current = false;
+
     return new Promise((resolve) => {
-      if (isCancelledRef.current || typeof window === 'undefined') {
+      if (typeof window === 'undefined') {
         resolve();
         return;
       }
 
+      let resolved = false;
+      const safeResolve = () => {
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
+      };
+
       const url = `/api/tts?text=${encodeURIComponent(text)}&lang=${targetLang}`;
-      const audio = new Audio(url);
+      const audio = new Audio();
       activeAudioRef.current = audio;
+
+      let hasFallenBack = false;
+      const triggerFallback = () => {
+        if (hasFallenBack || sessionIdRef.current !== currentSession || isCancelledRef.current) {
+          safeResolve();
+          return;
+        }
+        hasFallenBack = true;
+        // Strictly destroy the audio element before fallback to avoid simultaneous dual voice
+        audio.onended = null;
+        audio.onerror = null;
+        audio.onplay = null;
+        audio.pause();
+        audio.src = '';
+        try {
+          audio.removeAttribute('src');
+          audio.load();
+        } catch {}
+        if (activeAudioRef.current === audio) {
+          activeAudioRef.current = null;
+        }
+        speakUtterancePromise(text, targetLang, currentSession).then(safeResolve);
+      };
 
       audio.onended = () => {
         if (activeAudioRef.current === audio) {
           activeAudioRef.current = null;
         }
-        resolve();
+        safeResolve();
       };
 
-      audio.onerror = (e) => {
-        console.warn('Neural TTS stream fallback to SpeechSynthesis:', e);
-        speakUtterancePromise(text, targetLang).then(resolve);
+      audio.onerror = () => {
+        triggerFallback();
       };
 
-      audio.play().catch((err) => {
-        console.warn('Audio play error, falling back to speech synthesis:', err);
-        speakUtterancePromise(text, targetLang).then(resolve);
-      });
+      audio.src = url;
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          if (sessionIdRef.current !== currentSession || isCancelledRef.current) {
+            safeResolve();
+            return;
+          }
+          if (audio.paused && !hasFallenBack) {
+            triggerFallback();
+          }
+        });
+      }
     });
   };
 
   const speakNatural = async (text: string, targetLang: Language) => {
-    // Play full text continuously in a single seamless audio stream with zero pauses
     await playAudioStream(text, targetLang);
   };
 
   const speakBilingual = async (tamilText: string, englishText: string) => {
-    stopSpeaking();
-    isCancelledRef.current = false;
-    setIsSpeaking(true);
-    setSpeakingLang('both');
-
-    // 1. Speak Tamil part continuously
-    await speakNatural(tamilText, 'ta');
-
-    if (isCancelledRef.current) {
-      setIsSpeaking(false);
-      setSpeakingLang(null);
-      return;
-    }
-
-    // Smooth subtle breath transition between languages (80ms)
-    await new Promise(r => setTimeout(r, 80));
-
-    if (isCancelledRef.current) {
-      setIsSpeaking(false);
-      setSpeakingLang(null);
-      return;
-    }
-
-    // 2. Speak English part continuously with the same voice
-    await speakNatural(englishText, 'en');
-
-    setIsSpeaking(false);
+    // Speaks single clear voice based on the active user language
+    const targetLang: Language = language === 'ta' ? 'ta' : 'en';
+    const textToSpeak = language === 'ta' ? tamilText : englishText;
+    await speakText(textToSpeak, targetLang);
   };
 
   const speakText = async (text: string, forceLanguage?: Language | 'both', fallbackEnglishText?: string) => {
-    if (forceLanguage === 'both' && fallbackEnglishText) {
-      await speakBilingual(text, fallbackEnglishText);
-      return;
-    }
-
     stopSpeaking();
     isCancelledRef.current = false;
-    const targetLang = (forceLanguage === 'both' ? language : forceLanguage) || language;
+    const targetLang: Language = (forceLanguage === 'both' ? language : forceLanguage) || language;
+    const textToPlay = (forceLanguage === 'both' && fallbackEnglishText)
+      ? (language === 'ta' ? text : fallbackEnglishText)
+      : text;
 
     setIsSpeaking(true);
     setSpeakingLang(targetLang);
 
-    await speakNatural(text, targetLang);
+    await speakNatural(textToPlay, targetLang);
 
     setIsSpeaking(false);
     setSpeakingLang(null);
   };
 
   const stopSpeaking = () => {
-    isCancelledRef.current = true;
-    if (activeAudioRef.current) {
-      activeAudioRef.current.pause();
-      activeAudioRef.current.src = '';
-      activeAudioRef.current = null;
-    }
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
+    sessionIdRef.current++;
+    stopSpeakingInternal();
     setIsSpeaking(false);
     setSpeakingLang(null);
   };

@@ -153,7 +153,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenReportModal }) => {
                   }}
                   className="w-full text-left px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 flex items-center justify-between"
                 >
-                  <span>🗣️ தமிழில் கேட்க</span>
+                  <span>🗣️ தமிழ் குரல்</span>
                   <span className="text-[10px] text-slate-400">Tamil</span>
                 </button>
                 <button
@@ -163,19 +163,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenReportModal }) => {
                   }}
                   className="w-full text-left px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-sky-50 hover:text-sky-800 flex items-center justify-between"
                 >
-                  <span>🗣️ English Guide</span>
+                  <span>🗣️ English Voice</span>
                   <span className="text-[10px] text-slate-400">English</span>
-                </button>
-                <button
-                  onClick={() => {
-                    const tamilBrief = `வணக்கம்! இது உங்கள் கிராம குறைதீர்ப்பு மற்றும் விவசாய தளம். தற்போது ${pendingCount} புகார்கள் உள்ளன.`;
-                    const englishBrief = `Welcome to RuralFix and Agro MedKnow. You have ${pendingCount} pending grievances.`;
-                    speakBilingual(tamilBrief, englishBrief);
-                  }}
-                  className="w-full text-left px-3 py-1.5 text-xs font-black text-amber-900 bg-amber-50/50 hover:bg-amber-100 flex items-center justify-between border-t border-slate-100"
-                >
-                  <span>🌐 இருமொழிகளிலும்</span>
-                  <span className="text-[10px] bg-amber-200 text-amber-950 px-1.5 py-0.5 rounded font-black">Both</span>
                 </button>
               </div>
             </div>
