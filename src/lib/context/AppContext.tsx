@@ -1,0 +1,461 @@
+'use client';
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { 
+  UserRole, 
+  Language, 
+  Complaint, 
+  WorkerProfile, 
+  FarmerProfile, 
+  MandiPrice, 
+  GovtScheme, 
+  WeatherData,
+  ComplaintStatus
+} from '../../types';
+import { 
+  INITIAL_COMPLAINTS, 
+  WORKERS_LIST, 
+  INITIAL_FARMER_PROFILE, 
+  MANDI_PRICES, 
+  GOVT_SCHEMES, 
+  CURRENT_WEATHER 
+} from '../mockData';
+import { translations } from '../translations';
+
+interface AppContextType {
+  role: UserRole;
+  setRole: (role: UserRole) => void;
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  t: (key: keyof typeof translations.en) => string;
+  complaints: Complaint[];
+  workers: WorkerProfile[];
+  farmerProfile: FarmerProfile;
+  weather: WeatherData;
+  mandiPrices: MandiPrice[];
+  govSchemes: GovtScheme[];
+  addComplaint: (complaint: Omit<Complaint, 'id' | 'createdAt' | 'updatedAt'>) => Complaint;
+  assignWorkerToComplaint: (complaintId: string, workerId: string) => void;
+  updateComplaintByWorker: (
+    complaintId: string, 
+    status: ComplaintStatus, 
+    notes?: string, 
+    photoAfter?: string, 
+    materials?: string[]
+  ) => void;
+  verifyComplaintByAuthority: (complaintId: string, rating?: number, feedback?: string) => void;
+  updateFarmerProfile: (profile: Partial<FarmerProfile>) => void;
+  speakText: (text: string, forceLanguage?: Language | 'both', fallbackEnglishText?: string) => void;
+  speakBilingual: (tamilText: string, englishText: string) => void;
+  isSpeaking: boolean;
+  speakingLang: 'ta' | 'en' | 'both' | null;
+  stopSpeaking: () => void;
+  activeNotification: string | null;
+  dismissNotification: () => void;
+  isReportModalOpen: boolean;
+  setIsReportModalOpen: (open: boolean) => void;
+  openReportModal: () => void;
+  closeReportModal: () => void;
+}
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const LOCAL_STORAGE_KEY_COMPLAINTS = 'ruralfix_complaints_v1';
+const LOCAL_STORAGE_KEY_FARMER = 'agromed_farmer_v1';
+const LOCAL_STORAGE_KEY_ROLE = 'ruralfix_role_v1';
+const LOCAL_STORAGE_KEY_LANG = 'ruralfix_lang_v1';
+
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [role, setRoleState] = useState<UserRole>('citizen');
+  const [language, setLanguageState] = useState<Language>('en');
+  const [complaints, setComplaints] = useState<Complaint[]>(INITIAL_COMPLAINTS);
+  const [workers, setWorkers] = useState<WorkerProfile[]>(WORKERS_LIST);
+  const [farmerProfile, setFarmerProfileState] = useState<FarmerProfile>(INITIAL_FARMER_PROFILE);
+  const [weather] = useState<WeatherData>(CURRENT_WEATHER);
+  const [mandiPrices] = useState<MandiPrice[]>(MANDI_PRICES);
+  const [govSchemes] = useState<GovtScheme[]>(GOVT_SCHEMES);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingLang, setSpeakingLang] = useState<'ta' | 'en' | 'both' | null>(null);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [activeNotification, setActiveNotification] = useState<string | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const activeAudioRef = React.useRef<HTMLAudioElement | null>(null);
+  const isCancelledRef = React.useRef(false);
+
+  const openReportModal = () => setIsReportModalOpen(true);
+  const closeReportModal = () => setIsReportModalOpen(false);
+
+  // Load from local storage on mount & pre-fetch voices
+  useEffect(() => {
+    try {
+      const savedComplaints = localStorage.getItem(LOCAL_STORAGE_KEY_COMPLAINTS);
+      if (savedComplaints) {
+        setComplaints(JSON.parse(savedComplaints));
+      }
+      const savedFarmer = localStorage.getItem(LOCAL_STORAGE_KEY_FARMER);
+      if (savedFarmer) {
+        setFarmerProfileState(JSON.parse(savedFarmer));
+      }
+      const savedRole = localStorage.getItem(LOCAL_STORAGE_KEY_ROLE);
+      if (savedRole && ['citizen', 'authority', 'worker', 'farmer', 'admin'].includes(savedRole)) {
+        setRoleState(savedRole as UserRole);
+      }
+      const savedLang = localStorage.getItem(LOCAL_STORAGE_KEY_LANG);
+      if (savedLang && (savedLang === 'en' || savedLang === 'ta')) {
+        setLanguageState(savedLang as Language);
+      }
+    } catch (e) {
+      console.warn('LocalStorage error:', e);
+    }
+
+    // Pre-fetch browser Speech Synthesis voices
+    const loadVoices = () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        const availableVoices = window.speechSynthesis.getVoices();
+        if (availableVoices && availableVoices.length > 0) {
+          setVoices(availableVoices);
+        }
+      }
+    };
+
+    loadVoices();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  const setRole = (newRole: UserRole) => {
+    setRoleState(newRole);
+    localStorage.setItem(LOCAL_STORAGE_KEY_ROLE, newRole);
+  };
+
+  const setLanguage = (newLang: Language) => {
+    setLanguageState(newLang);
+    localStorage.setItem(LOCAL_STORAGE_KEY_LANG, newLang);
+  };
+
+  const t = (key: keyof typeof translations.en): string => {
+    const langDict = translations[language] || translations.en;
+    return langDict[key] || translations.en[key] || String(key);
+  };
+
+  const addComplaint = (data: Omit<Complaint, 'id' | 'createdAt' | 'updatedAt'>): Complaint => {
+    const randomNum = Math.floor(100 + Math.random() * 900);
+    const newId = `RF-2026-${randomNum}`;
+    const now = new Date().toISOString();
+
+    const newComplaint: Complaint = {
+      ...data,
+      id: newId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const updated = [newComplaint, ...complaints];
+    setComplaints(updated);
+    localStorage.setItem(LOCAL_STORAGE_KEY_COMPLAINTS, JSON.stringify(updated));
+    setActiveNotification(`New Grievance #${newId} recorded with GPS coordinates!`);
+    return newComplaint;
+  };
+
+  const assignWorkerToComplaint = (complaintId: string, workerId: string) => {
+    const worker = workers.find(w => w.id === workerId);
+    if (!worker) return;
+
+    const now = new Date().toISOString();
+    const updated = complaints.map(c => {
+      if (c.id === complaintId) {
+        return {
+          ...c,
+          status: 'assigned' as ComplaintStatus,
+          assignedWorker: {
+            id: worker.id,
+            name: worker.name,
+            phone: worker.phone,
+            specialization: worker.specialization,
+            avatar: worker.avatar,
+          },
+          assignedAt: now,
+          updatedAt: now,
+        };
+      }
+      return c;
+    });
+
+    setComplaints(updated);
+    localStorage.setItem(LOCAL_STORAGE_KEY_COMPLAINTS, JSON.stringify(updated));
+
+    // Update worker active task count
+    setWorkers(workers.map(w => w.id === workerId ? { ...w, activeTasks: w.activeTasks + 1 } : w));
+    setActiveNotification(`Grievance #${complaintId} assigned to field worker ${worker.name}.`);
+  };
+
+  const updateComplaintByWorker = (
+    complaintId: string, 
+    status: ComplaintStatus, 
+    notes?: string, 
+    photoAfter?: string, 
+    materials?: string[]
+  ) => {
+    const now = new Date().toISOString();
+    const updated = complaints.map(c => {
+      if (c.id === complaintId) {
+        return {
+          ...c,
+          status,
+          repairNotes: notes || c.repairNotes,
+          photoAfter: photoAfter || c.photoAfter,
+          materialsUsed: materials || c.materialsUsed,
+          repairedAt: (status === 'repaired' || status === 'verified') ? now : c.repairedAt,
+          updatedAt: now,
+        };
+      }
+      return c;
+    });
+
+    setComplaints(updated);
+    localStorage.setItem(LOCAL_STORAGE_KEY_COMPLAINTS, JSON.stringify(updated));
+    setActiveNotification(`Grievance #${complaintId} updated to status: ${status.toUpperCase()}`);
+  };
+
+  const verifyComplaintByAuthority = (complaintId: string, rating?: number, feedback?: string) => {
+    const now = new Date().toISOString();
+    const updated = complaints.map(c => {
+      if (c.id === complaintId) {
+        return {
+          ...c,
+          status: 'verified' as ComplaintStatus,
+          verifiedAt: now,
+          citizenRating: rating || 5,
+          citizenFeedback: feedback || 'Work inspected and verified by Panchayat Officer.',
+          updatedAt: now,
+        };
+      }
+      return c;
+    });
+
+    setComplaints(updated);
+    localStorage.setItem(LOCAL_STORAGE_KEY_COMPLAINTS, JSON.stringify(updated));
+    setActiveNotification(`Grievance #${complaintId} verified and officially closed!`);
+  };
+
+  const updateFarmerProfile = (profileUpdate: Partial<FarmerProfile>) => {
+    const updated = { ...farmerProfile, ...profileUpdate };
+    setFarmerProfileState(updated);
+    localStorage.setItem(LOCAL_STORAGE_KEY_FARMER, JSON.stringify(updated));
+  };
+
+  const getBestVoice = (targetLang: Language): SpeechSynthesisVoice | null => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+    const currentVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
+    if (!currentVoices || currentVoices.length === 0) return null;
+
+    if (targetLang === 'ta') {
+      // Find dedicated Tamil voice
+      const tamilVoice = currentVoices.find(v => 
+        v.lang.toLowerCase().startsWith('ta') ||
+        v.name.toLowerCase().includes('tamil') ||
+        v.name.toLowerCase().includes('valluvar') ||
+        v.name.toLowerCase().includes('pallavi')
+      );
+      if (tamilVoice) return tamilVoice;
+
+      // Secondary: any Indian accent voice
+      const inVoice = currentVoices.find(v => v.lang.toLowerCase().includes('ta-in') || v.lang.toLowerCase().includes('in'));
+      if (inVoice) return inVoice;
+    } else {
+      // Find dedicated English voice (prefer Indian English or standard)
+      const enInVoice = currentVoices.find(v => 
+        v.lang.toLowerCase() === 'en-in' || 
+        v.name.toLowerCase().includes('india') || 
+        v.name.toLowerCase().includes('heera') || 
+        v.name.toLowerCase().includes('ravi')
+      );
+      if (enInVoice) return enInVoice;
+
+      const enVoice = currentVoices.find(v => v.lang.toLowerCase().startsWith('en'));
+      if (enVoice) return enVoice;
+    }
+    return null;
+  };
+
+  const speakUtterancePromise = (text: string, targetLang: Language): Promise<void> => {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window) || isCancelledRef.current) {
+        resolve();
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = targetLang === 'ta' ? 'ta-IN' : 'en-IN';
+      utterance.rate = targetLang === 'ta' ? 0.88 : 0.95; // Slightly slower for clear Tamil syllables
+      utterance.pitch = 1.0;
+
+      const voice = getBestVoice(targetLang);
+      if (voice) {
+        utterance.voice = voice;
+      }
+
+      utterance.onend = () => {
+        resolve();
+      };
+      utterance.onerror = (e) => {
+        console.warn('SpeechSynthesis error:', e);
+        resolve();
+      };
+
+      window.speechSynthesis.speak(utterance);
+    });
+  };
+
+  const playAudioStream = (text: string, targetLang: Language): Promise<void> => {
+    return new Promise((resolve) => {
+      if (isCancelledRef.current || typeof window === 'undefined') {
+        resolve();
+        return;
+      }
+
+      const url = `/api/tts?text=${encodeURIComponent(text)}&lang=${targetLang}`;
+      const audio = new Audio(url);
+      activeAudioRef.current = audio;
+
+      audio.onended = () => {
+        if (activeAudioRef.current === audio) {
+          activeAudioRef.current = null;
+        }
+        resolve();
+      };
+
+      audio.onerror = (e) => {
+        console.warn('Neural TTS stream fallback to SpeechSynthesis:', e);
+        speakUtterancePromise(text, targetLang).then(resolve);
+      };
+
+      audio.play().catch((err) => {
+        console.warn('Audio play error, falling back to speech synthesis:', err);
+        speakUtterancePromise(text, targetLang).then(resolve);
+      });
+    });
+  };
+
+  const speakNatural = async (text: string, targetLang: Language) => {
+    // Play full text continuously in a single seamless audio stream with zero pauses
+    await playAudioStream(text, targetLang);
+  };
+
+  const speakBilingual = async (tamilText: string, englishText: string) => {
+    stopSpeaking();
+    isCancelledRef.current = false;
+    setIsSpeaking(true);
+    setSpeakingLang('both');
+
+    // 1. Speak Tamil part continuously
+    await speakNatural(tamilText, 'ta');
+
+    if (isCancelledRef.current) {
+      setIsSpeaking(false);
+      setSpeakingLang(null);
+      return;
+    }
+
+    // Smooth subtle breath transition between languages (80ms)
+    await new Promise(r => setTimeout(r, 80));
+
+    if (isCancelledRef.current) {
+      setIsSpeaking(false);
+      setSpeakingLang(null);
+      return;
+    }
+
+    // 2. Speak English part continuously with the same voice
+    await speakNatural(englishText, 'en');
+
+    setIsSpeaking(false);
+  };
+
+  const speakText = async (text: string, forceLanguage?: Language | 'both', fallbackEnglishText?: string) => {
+    if (forceLanguage === 'both' && fallbackEnglishText) {
+      await speakBilingual(text, fallbackEnglishText);
+      return;
+    }
+
+    stopSpeaking();
+    isCancelledRef.current = false;
+    const targetLang = (forceLanguage === 'both' ? language : forceLanguage) || language;
+
+    setIsSpeaking(true);
+    setSpeakingLang(targetLang);
+
+    await speakNatural(text, targetLang);
+
+    setIsSpeaking(false);
+    setSpeakingLang(null);
+  };
+
+  const stopSpeaking = () => {
+    isCancelledRef.current = true;
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current.src = '';
+      activeAudioRef.current = null;
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+    setSpeakingLang(null);
+  };
+
+  const dismissNotification = () => setActiveNotification(null);
+
+  return (
+    <AppContext.Provider
+      value={{
+        role,
+        setRole,
+        language,
+        setLanguage,
+        t,
+        complaints,
+        workers,
+        farmerProfile,
+        weather,
+        mandiPrices,
+        govSchemes,
+        addComplaint,
+        assignWorkerToComplaint,
+        updateComplaintByWorker,
+        verifyComplaintByAuthority,
+        updateFarmerProfile,
+        speakText,
+        speakBilingual,
+        isSpeaking,
+        speakingLang,
+        stopSpeaking,
+        activeNotification,
+        dismissNotification,
+        isReportModalOpen,
+        setIsReportModalOpen,
+        openReportModal,
+        closeReportModal,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+export const useApp = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useApp must be used within an AppProvider');
+  }
+  return context;
+};
